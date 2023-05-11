@@ -1,4 +1,4 @@
-<image src="/images/banner.png" alt="AFKTools banner">
+<image src="/images/AFKTools banner.png" alt="AFKTools banner">
 # AFKTools
 AFKTools is .lua script for 3.5k+ lines designed for pumping accounts in San Andreas Multiplayer
 
