@@ -20,11 +20,9 @@ vk-api, libs for moonloader
 
   
 ## Link's
-
-    <a href="https://www.blast.hk/threads/139278/">BLASTHACK topic</a><br>
-    <a href="https://vk.com/notify.arizona">New's public</a><br>
-    <a href="https://vk.me/join/OznKTxWIyyzo20jNxgdqqNkop85ZPJE1Xa0=">Chat</a><br>
-    <p>Support from Mamashin Squad.</p>
-  </div>
+    
+    [BLASTHACK topic](https://www.blast.hk/threads/139278/) blasthack 
+    [News public](https://vk.com/notify.arizona) Public
+    [Chat](https://vk.me/join/OznKTxWIyyzo20jNxgdqqNkop85ZPJE1Xa0=) User's chat
   
   
