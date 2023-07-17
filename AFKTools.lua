@@ -3002,7 +3002,7 @@ function imgui.OnDrawFrame()
 			imgui.BeginGroup()
 			-- Cosmo --
 			if imgui.Button(u8('Скачать VIP-Resend by Cosmo')) then
-				downloadUrlToFile('https://raw.githubusercontent.com/JekSkeez/afktools/main/vip-resend.lua',
+				downloadUrlToFile('https://github.com/SMamashin/AFKTools/raw/main/scripts/vip-resend.lua',
                    'moonloader\\vip-resend.lua', 
                    'vip-resend.lua')
 				sampAddChatMessage("{FF8000}[AFKTools]{FFFFFF} VIP-Resend успешно загружен! Нажмите Ctrl+R для перезапуска MoonLoader.", -1)
@@ -3012,7 +3012,7 @@ function imgui.OnDrawFrame()
 			-- AIR -- 
 			imgui.SameLine()
 			if imgui.Button(u8('Скачать AntiAFK by AIR')) then
-				downloadUrlToFile('https://raw.githubusercontent.com/JekSkeez/afktools/main/AntiAFK_1.4_byAIR.asi',
+				downloadUrlToFile('https://github.com/SMamashin/AFKTools/raw/main/scripts/AntiAFK_1.4_byAIR.asi',
                 getGameDirectory()..'\\AntiAFK_1.4_byAIR.asi',
                 'AntiAFK_1.4_byAIR.asi')
 				sampAddChatMessage("{FF8000}[AFKTools]{FFFFFF} AntiAFK успешно загружен! Перезайдите полностью в игру, чтобы он заработал.", -1)
@@ -3020,8 +3020,9 @@ function imgui.OnDrawFrame()
 			imgui.SameLine()
 			imgui.TextQuestion(u8("ASI-Плагин от A.I.R, отличный AntiAFK для лаунчера, на случай проблем с нашей Lua-версией."))
 			-- BoxSet --
+			imgui.SameLine()
 			if imgui.Button(u8('Автоотркытие сундуков /boxset')) then
-				downloadUrlToFile('https://raw.githubusercontent.com/JekSkeez/afktools/main/open_roulettes.lua',
+				downloadUrlToFile('https://github.com/SMamashin/AFKTools/raw/main/scripts/open_roulettes.lua',
                    'moonloader\\open_roulettes.lua', 
                    'open_roulettes.lua')
 				sampAddChatMessage("{FF8000}[AFKTools]{FFFFFF} Open_Roulettes(/boxset) успешно загружен! Нажмите Ctrl+R для перезапуска MoonLoader.", -1)
@@ -3029,7 +3030,7 @@ function imgui.OnDrawFrame()
             imgui.SameLine()
 			imgui.TextQuestion(u8('/boxset - устаревшая альтернатива нашему автооткрытию, вроде ещё работает.'))
 			-- Libs --
-			imgui.SameLine()
+		--[[	imgui.SameLine()
 			if imgui.Button(u8('Скачать нужные библиотеки')) then
 				downloadUrlToFile('https://raw.githubusercontent.com/JekSkeez/afktools/main/dkjson.lua',
 				'moonloader\\lib\\dkjson.lua', 
@@ -3047,7 +3048,7 @@ function imgui.OnDrawFrame()
 			end
 			imgui.SameLine()
 			imgui.TextQuestion(u8('В moonloader/lib - будут загружены дополнительные библиотеки используемые в нашем скрипте.'))
-			imgui.SameLine()
+			imgui.SameLine()]]
 			imgui.EndGroup()
 			imgui.EndChild()
 
@@ -4454,11 +4455,11 @@ updates.data = {
 	status = '',
 	relevant_version = '',
 	url_update = '',
-	url_json = 'https://raw.githubusercontent.com/JekSkeez/afktools/main/afktools.json' 
+	url_json = 'https://raw.githubusercontent.com/SMamashin/AFKTools/main/AFKTools.json' 
 }
 function updates:getlast(autoupd)
 	print('call getlast')
-	self.data.status = '<< Авто-обновление >>\n\nПроверяю обновления'
+	self.data.status = 'Проверяю обновления'
 	if autoupd then
 		AFKMessage(self.data.status)
 	end
