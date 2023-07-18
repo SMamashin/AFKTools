@@ -1,14 +1,18 @@
 <image src="/AFKTools banner.png" alt="AFKTools banner">
   
 # AFKTools
-AFKTools is .lua script for 3.5k+ lines designed for pumping accounts in San Andreas Multiplayer
+AFKTools is .lua script for 4.5k+ lines designed for pumping accounts in San Andreas Multiplayer
 
----
-## Development: Mamashin & Bakhusse. 
-
+# About
 A project with source and understandable code. 
 
-vk-api, libs for moonloader
+Different libs for MoonLoader, by type of effil, requests, faIcons and others
+
+The script was written by the famous developer of "Neverlane" in 2020.
+
+Supported since 2022 - Mamashin/SMamashin & Bakhusse.
+
+The script is an assistant for pumping an account in SA:MP, on the Arizona Role Play project
   
 ## Installation
 
@@ -18,6 +22,10 @@ vk-api, libs for moonloader
 
     - The .ini config is created automatically.
 
+
+---
+## Author: neverlane
+## Development: Mamashin & Bakhusse. 
   
 ## Link's
 [BLASTHACK](https://www.blast.hk/threads/139278/) topic <br>
