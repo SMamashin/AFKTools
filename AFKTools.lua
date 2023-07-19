@@ -1,6 +1,6 @@
 script_name('AFK Tools')
 script_author("Bakhusse & Mamashin")
-script_version('3.0 beta')
+script_version('3.0.1 Beta')
 script_properties('work-in-pause')
 
 local dlstatus = require("moonloader").download_status
@@ -571,7 +571,7 @@ changelog5 = [[
 ]]
 
 scriptinfo = [[
-AFK Tools - скрипт, для прокачки аккаунта на Arizona Role Play!
+ AFK Tools - скрипт, для прокачки аккаунта на Arizona Role Play!
 В данном разделе вы можете найти ссылки на соц-сети проекта(AFKTools), тем самым больше узнать о скрипте.
 
 По вопросам по скрипту, поддержке, тех.поддержке, помощи, обращаться к  - Mamashin
@@ -581,12 +581,11 @@ AFK Tools - скрипт, для прокачки аккаунта на Arizona Role Play!
 
 Автор проекта: Neverlane(ronnyevans)
 
+Отдельное спасибо: Cosmo за моральную поддержку!
+
 2020-2023.
 ]]
 
-thanks = [[
-Отдельное спасибо: Cosmo за моральную поддержку!
-]]
 
 scriptcommand = [[
 
@@ -1987,7 +1986,7 @@ function lastchatmessageTG(intchat, tochat)
 		end
 		sendtgnotf(allchat)
 	else
-		sendtgnotf('(error) Персонаж не заспавнен')
+		sendtgnotf('(Error) Персонаж не заспавнен')
 	end
 end
 
@@ -2006,7 +2005,7 @@ function getPlayerArzStats()
 		if not vknotf.dienable.v then sendvknotf(sendstatsstate == true and 'Ошибка! В течении 10 секунд скрипт не получил информацию!' or tostring(sendstatsstate)) end
 		sendstatsstate = false
 	else
-		sendvknotf('(error) Персонаж не заспавнен')
+		sendvknotf('(Error) Персонаж не заспавнен')
 	end
 end
 function lastchatmessage(intchat, tochat)
@@ -2019,7 +2018,7 @@ function lastchatmessage(intchat, tochat)
 		end
 		sendvknotf(allchat)
 	else
-		sendvknotf('(error) Персонаж не заспавнен')
+		sendvknotf('(Error) Персонаж не заспавнен')
 	end
 end
 function getPlayerArzHun()
@@ -2036,7 +2035,7 @@ function getPlayerArzHun()
 		if not vknotf.dienable.v then sendvknotf(gethunstate == true and 'Ошибка! В течении 10 секунд скрипт не получил информацию!' or tostring(gethunstate)) end
 		gethunstate = false
 	else
-		sendvknotf('(error) Персонаж не заспавнен')
+		sendvknotf('(Error) Персонаж не заспавнен')
 	end
 end
 function randomInt() 
@@ -2751,9 +2750,61 @@ function imgui.BeforeDrawFrame()
     end
 end
 
+function imgui.TextColoredRGB(text)
+    local style = imgui.GetStyle()
+    local colors = style.Colors
+    local ImVec4 = imgui.ImVec4
+
+    local explode_argb = function(argb)
+        local a = bit.band(bit.rshift(argb, 24), 0xFF)
+        local r = bit.band(bit.rshift(argb, 16), 0xFF)
+        local g = bit.band(bit.rshift(argb, 8), 0xFF)
+        local b = bit.band(argb, 0xFF)
+        return a, r, g, b
+    end
+
+    local getcolor = function(color)
+        if color:sub(1, 6):upper() == 'SSSSSS' then
+            local r, g, b = colors[1].x, colors[1].y, colors[1].z
+            local a = tonumber(color:sub(7, 8), 16) or colors[1].w * 255
+            return ImVec4(r, g, b, a / 255)
+        end
+        local color = type(color) == 'string' and tonumber(color, 16) or color
+        if type(color) ~= 'number' then return end
+        local r, g, b, a = explode_argb(color)
+        return imgui.ImColor(r, g, b, a):GetVec4()
+    end
+
+    local render_text = function(text_)
+        for w in text_:gmatch('[^\r\n]+') do
+            local text, colors_, m = {}, {}, 1
+            w = w:gsub('{(......)}', '{%1FF}')
+            while w:find('{........}') do
+                local n, k = w:find('{........}')
+                local color = getcolor(w:sub(n + 1, k - 1))
+                if color then
+                    text[#text], text[#text + 1] = w:sub(m, n - 1), w:sub(k + 1, #w)
+                    colors_[#colors_ + 1] = color
+                    m = n
+                end
+                w = w:sub(1, n - 1) .. w:sub(k + 1, #w)
+            end
+            if text[0] then
+                for i = 0, #text do
+                    imgui.TextColored(colors_[i] or colors[1], u8(text[i]))
+                    imgui.SameLine(nil, 0)
+                end
+                imgui.NewLine()
+            else imgui.Text(u8(w)) end
+        end
+    end
+
+    render_text(text)
+end
 
 function imgui.OnDrawFrame()
 	if afksets.v then
+		local acc = sampGetPlayerNickname(select(2,sampGetPlayerIdByCharHandle(playerPed)))
 		local sw, sh = getScreenResolution()
 		imgui.SetNextWindowSize(imgui.ImVec2(920,470))
 		imgui.SetNextWindowPos(imgui.ImVec2(sw/2,sh/2),imgui.Cond.FirstUseEver,imgui.ImVec2(0.5,0.5))
@@ -2765,6 +2816,9 @@ function imgui.OnDrawFrame()
 				menunum = 0
 			end
 		end
+		imgui.SetCursorPosX(350) -- позволяет задать положение функции по горизнотали
+		imgui.SetCursorPosY(85) -- позволяет задать положение функции по вертикали
+ 		imgui.TextColoredRGB("Добро пожаловать, {FF0000} " ..acc) 
 		imgui.SetCursorPos(imgui.ImVec2(40,8)) -- Author: neverlane(ronnyevans)\n
 		imgui.RenderLogo() imgui.SameLine() imgui.Text(u8('\nDev/Support: Bakhusse & Mamashin'))
 		imgui.SetCursorPos(imgui.ImVec2(516,8))
@@ -3141,14 +3195,14 @@ function imgui.OnDrawFrame()
 			imgui.Spacing()
 			--imgui.Text(fa.ICON_FILE_CODE_O)
 			--imgui.SameLine()
-			imgui.Text(u8(scriptinfo))
-			imgui.Text(u8(thanks))
+			imgui.Text(fa.ICON_FILE_CODE_O .. u8(scriptinfo))
+			PaddingSpace()
 			if imgui.CollapsingHeader(u8('Команды скрипта ') .. fa.ICON_COG) then
 				imgui.TextWrapped(u8(scriptcommand))
 			end
 			--imgui.SetCursorPosX(20) -- позволяет задать положение функции по горизнотали
 			--imgui.SetCursorPosY(100) -- позволяет задать положение функции по вертикали
-			imgui.Spacing()
+			PaddingSpace()
 			imgui.Text(u8("Для пользователей скрипта "))-- .. fa.ICON_USER)
 			if imgui.Button(u8('Группа ') .. fa.ICON_VK  ..u8(' - (Info)')) then
 				os.execute("start https://vk.com/notify.arizona")
