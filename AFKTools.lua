@@ -1,6 +1,6 @@
 script_name('AFK Tools')
 script_author("Bakhusse & Mamashin")
-script_version('3.0.1 Beta')
+script_version('3.0.2 Beta')
 script_properties('work-in-pause')
 
 local dlstatus = require("moonloader").download_status
@@ -608,6 +608,18 @@ howsetVK = [[
 Так же, присутствует видеоадаптация гайда для тех, кто не любитель читать.
 
 Используйте кнопки ниже, чтобы перейти на источники.
+
+]]
+
+howsetTG = [[
+В Telegram всё куда слаще и проще чем с VK API. 
+Да бы не переписывать одно и тоже по 100 раз, мы решили использовать единый полноценный гайд.
+
+Гайд включает в себя полноценную процедуру реализации получения уведомлений в Telegram, шаг за шагом.
+
+Так же у нас имеется чат пользователей в котором вы можете спросить помощи. 
+
+Используйте кнопки ниже, чтобы перейти на источники
 
 ]]
 
@@ -2852,7 +2864,7 @@ function imgui.OnDrawFrame()
 				{fa.ICON_HISTORY .. u8(' История обновлений'),5,u8('Список изменений которые\n	 произошли в скрипте')},
 				{fa.ICON_COGS .. u8(' Кастомизация [NEW]'),6,u8('Выбор стиля, изменение темы скирпта')},
 				{fa.ICON_SEARCH .. u8(' Поиск в чате'),7,u8('Отправляет нужные сообщения \n                  с чата в ') .. fa.ICON_VK .. u8(' и ') .. fa.ICON_TELEGRAM},
-				{fa.ICON_VK .. u8(' Notifications'),8,u8('Уведомления в VK')},
+				{fa.ICON_VK .. u8(' Notifications'),8,u8('Уведомления в ВКонтакте')},
 				{fa.ICON_TELEGRAM .. u8(' Notifications [NEW]'),9,u8('Уведомления в Telegram')}
 			}
 
@@ -3432,10 +3444,23 @@ function imgui.OnDrawFrame()
 				imgui.InputText(u8('TG ID'), tgnotf.user_id)
 				imgui.SameLine()
 				imgui.TextQuestion(u8('User ID в цифрах!'))
-				imgui.SetNextWindowSize(imgui.ImVec2(600,200))
-				if imgui.BeginPopupModal('##howscreen',true,imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize) then
-					imgui.Text(u8(howscreen))
-					imgui.SetCursorPosY(150)
+				if imgui.Button(u8('Проверить уведомления')) then sendtgnotf('Скрипт работает!') end
+				imgui.SameLine()
+				imgui.SetNextWindowSize(imgui.ImVec2(666,200)) -- с пабликом (600,230) • без (900,530)
+				if imgui.BeginPopupModal('##howsetTG',true,imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize) then
+					imgui.Text(u8(howsetTG))
+					if imgui.Button(u8('Группа ') .. fa.ICON_VK) then
+						os.execute("start https://vk.com/notify.arizona")
+					end
+					imgui.SameLine()
+					if imgui.Button(u8('Беседа ') .. fa.ICON_COMMENTS) then
+						os.execute("start https://vk.me/join/OznKTxWIyyzo20jNxgdqqNkop85ZPJE1Xa0=")
+					end
+					imgui.SameLine()
+					if imgui.Button(u8('Гайд ') .. fa.ICON_BOOKMARK_O) then
+						os.execute("start https://vk.com/@notify.arizona-kak-podkluchit-svoe-soobschestvo")
+					end
+					imgui.SetCursorPosY(160) -- с пабликом (200) • без (490)
 					local wid = imgui.GetWindowWidth()
 					imgui.SetCursorPosX(wid / 2 - 30)
 					if imgui.Button(u8'Закрыть', imgui.ImVec2(60,20)) then
@@ -3443,7 +3468,7 @@ function imgui.OnDrawFrame()
 					end
 					imgui.EndPopup()
 				end
-				if imgui.Button(u8('Проверить уведомления')) then sendtgnotf('Скрипт работает!') end
+				if imgui.Button(u8('Как настроить')) then imgui.OpenPopup('##howsetTG') end
 				imgui.SameLine()
 				imgui.EndGroup()
 				for i = 1, 3 do imgui.Spacing() end
