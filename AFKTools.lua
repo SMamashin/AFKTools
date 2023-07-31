@@ -881,6 +881,8 @@ local checkrulopen = lua_thread.create_suspended(function()
             wait(355)
             fix = true
             sampSendChat("/mn")
+			wait(2000)
+			sampCloseCurrentDialogWithButton(0)
             wait(2000)
             fix = false
 			AFKMessage('Начинаем делать проверку')
