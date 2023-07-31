@@ -1,6 +1,6 @@
 script_name('AFK Tools')
 script_author("Bakhusse & Mamashin")
-script_version('3.0.2 Beta')
+script_version('3.0.3 Beta')
 script_properties('work-in-pause')
 
 local dlstatus = require("moonloader").download_status
@@ -880,7 +880,7 @@ local checkrulopen = lua_thread.create_suspended(function()
 			sampSendClickTextdraw(65535)
             wait(355)
             fix = true
-            sampSendChat("/donate")
+            sampSendChat("/mn")
             wait(2000)
             fix = false
 			AFKMessage('Начинаем делать проверку')
