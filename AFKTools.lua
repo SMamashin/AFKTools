@@ -1,6 +1,6 @@
 script_name('AFK Tools')
 script_author("Bakhusse & Mamashin")
-script_version('3.0.3 FIX')
+script_version('3.0.4 FIX')
 script_properties('work-in-pause')
 
 local dlstatus = require("moonloader").download_status
@@ -2862,12 +2862,12 @@ function imgui.OnDrawFrame()
 				{fa.ICON_USER .. u8(' Основное'),1,u8('Настройка основных функций')},
 				{fa.ICON_PENCIL_SQUARE .. u8(' Автозаполнение'),2,u8('Автоввод текста в диалоги')},
 				{fa.ICON_CUTLERY .. u8(' Авто-еда'),3,u8('Авто-еда & Авто-хилл')},
-				{fa.ICON_INFO .. u8(' Информация [NEW]'),4,u8('Полезная информация о проекте')},
+				{fa.ICON_INFO .. u8(' Информация'),4,u8('Полезная информация о проекте')},
 				{fa.ICON_HISTORY .. u8(' История обновлений'),5,u8('Список изменений которые\n	 произошли в скрипте')},
-				{fa.ICON_COGS .. u8(' Кастомизация [NEW]'),6,u8('Выбор стиля, изменение темы скирпта')},
+				{fa.ICON_COGS .. u8(' Кастомизация'),6,u8('Выбор стиля, изменение темы скирпта')},
 				{fa.ICON_SEARCH .. u8(' Поиск в чате'),7,u8('Отправляет нужные сообщения \n                  с чата в ') .. fa.ICON_VK .. u8(' и ') .. fa.ICON_TELEGRAM},
 				{fa.ICON_VK .. u8(' Notifications'),8,u8('Уведомления в ВКонтакте')},
-				{fa.ICON_TELEGRAM .. u8(' Notifications [NEW]'),9,u8('Уведомления в Telegram')}
+				{fa.ICON_TELEGRAM .. u8(' Notifications [Beta]'),9,u8('Уведомления в Telegram')}
 			}
 
 			local function renderbutton(i)
