@@ -1,6 +1,6 @@
 script_name('AFK Tools')
 script_author("Bakhusse & Mamashin")
-script_version('3.0.5')
+script_version('3.1.0')
 script_properties('work-in-pause')
 
 local dlstatus = require("moonloader").download_status
