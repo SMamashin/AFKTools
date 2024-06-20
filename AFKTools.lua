@@ -2818,7 +2818,7 @@ end
 
 function imgui.OnDrawFrame()
 	if afksets.v then
-		local acc = sampGetPlayerNickname(select(2,sampGetPlayerIdByCharHandle(playerPed)))
+		-- local acc = sampGetPlayerNickname(select(2,sampGetPlayerIdByCharHandle(playerPed)))
 		local sw, sh = getScreenResolution()
 		imgui.SetNextWindowSize(imgui.ImVec2(920,470))
 		imgui.SetNextWindowPos(imgui.ImVec2(sw/2,sh/2),imgui.Cond.FirstUseEver,imgui.ImVec2(0.5,0.5))
@@ -2832,7 +2832,7 @@ function imgui.OnDrawFrame()
 		end
 		imgui.SetCursorPosX(350) -- позволяет задать положение функции по горизнотали
 		imgui.SetCursorPosY(85) -- позволяет задать положение функции по вертикали
- 		imgui.TextColoredRGB("Добро пожаловать, {FF0000} " ..acc) 
+ 		-- imgui.TextColoredRGB("Добро пожаловать, {FF0000} " ..acc) 
 		imgui.SetCursorPos(imgui.ImVec2(40,8)) -- Author: neverlane(ronnyevans)\n
 		imgui.RenderLogo() imgui.SameLine() imgui.Text(u8('\nDev/Support: Bakhusse & Mamashin'))
 		imgui.SetCursorPos(imgui.ImVec2(516,8))
