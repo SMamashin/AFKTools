@@ -55,6 +55,7 @@ local mainIni = inicfg.load({
 		platina = false,
 		mask = false,
 		tainik = false,
+		tainikvc = false,
 		wait = 1000
 	},
 	vknotf = {
@@ -625,7 +626,7 @@ howsetTG = [[
 
 customtext = [[
 
-Данный раздел находится на стадии Beta!
+Данный раздел находится на стадии разработки!
 
 В данном разделе вы можете наконец-то изменить ImGUI составляющую нашего скрипта!
 Задействован фристайл с BlastHack, а так же оригинальные темы на основе нашей основной темы!
@@ -672,7 +673,7 @@ local _message = {}
 local chat = "https://vk.me/join/OznKTxWIyyzo20jNxgdqqNkop85ZPJE1Xa0="
 
 local style_selected = imgui.ImInt(mainIni.theme.style) 
-local style_list = {u8"Тёмная [AFKTools]", u8'Светлая [AFKTools]\n\n', u8"Серая [BlastHack]", u8"Тёмная [BlastHack]", u8"Вишнёвая [BlastHack]", u8"Фиолетовая [BlastHack]", u8'Светло-Розовая [BlastHack]'}
+local style_list = {u8"Оригинальная", u8'Светлая', u8"Серая", u8"Тёмная", u8"Вишнёвая", u8"Фиолетовая", u8"Розовая"}
 
 local banner = imgui.CreateTextureFromFile(getWorkingDirectory() .. "\\resource\\AFKTools\\script_banner.png")
 
@@ -706,6 +707,7 @@ local roulette = {
 	platina = imgui.ImBool(mainIni.roulette.platina),
 	mask = imgui.ImBool(mainIni.roulette.mask),
 	tainik = imgui.ImBool(mainIni.roulette.tainik),
+	tainikvc = imgui.ImBool(mainIni.roulette.tainikvc),
 	wait = imgui.ImInt(mainIni.roulette.wait)
 }
 local vknotf = {
@@ -2818,7 +2820,7 @@ end
 
 function imgui.OnDrawFrame()
 	if afksets.v then
-		-- local acc = sampGetPlayerNickname(select(2,sampGetPlayerIdByCharHandle(playerPed)))
+		local acc = sampGetPlayerNickname(select(2,sampGetPlayerIdByCharHandle(playerPed)))
 		local sw, sh = getScreenResolution()
 		imgui.SetNextWindowSize(imgui.ImVec2(920,470))
 		imgui.SetNextWindowPos(imgui.ImVec2(sw/2,sh/2),imgui.Cond.FirstUseEver,imgui.ImVec2(0.5,0.5))
@@ -2830,11 +2832,11 @@ function imgui.OnDrawFrame()
 				menunum = 0
 			end
 		end
-		imgui.SetCursorPosX(350) -- позволяет задать положение функции по горизнотали
-		imgui.SetCursorPosY(85) -- позволяет задать положение функции по вертикали
- 		-- imgui.TextColoredRGB("Добро пожаловать, {FF0000} " ..acc) 
+		-- imgui.SetCursorPosX(350) -- позволяет задать положение функции по горизнотали
+		-- imgui.SetCursorPosY(85) -- позволяет задать положение функции по вертикали
+		local hostserver = sampGetCurrentServerName()
 		imgui.SetCursorPos(imgui.ImVec2(40,8)) -- Author: neverlane(ronnyevans)\n
-		imgui.RenderLogo() imgui.SameLine() imgui.Text(u8('\nDev/Support: Bakhusse & Mamashin'))
+		imgui.RenderLogo() imgui.SameLine() imgui.Text(u8('\nDev/Support: Bakhusse & Mamashin\nАккаунт: ' ..acc))
 		imgui.SetCursorPos(imgui.ImVec2(516,8))
 		imgui.BeginGroup()
 		imgui.Text(u8('Версия -> Текущая: '..thisScript().version..' | Актуальная: '..(updates.data.result and updates.data.relevant_version or 'Error')))
@@ -2867,7 +2869,7 @@ function imgui.OnDrawFrame()
 				{fa.ICON_COGS .. u8(' Кастомизация'),6,u8('Выбор стиля, изменение темы скирпта')},
 				{fa.ICON_SEARCH .. u8(' Поиск в чате'),7,u8('Отправляет нужные сообщения \n                  с чата в ') .. fa.ICON_VK .. u8(' и ') .. fa.ICON_TELEGRAM},
 				{fa.ICON_VK .. u8(' Notifications'),8,u8('Уведомления в ВКонтакте')},
-				{fa.ICON_TELEGRAM .. u8(' Notifications [Beta]'),9,u8('Уведомления в Telegram')}
+				{fa.ICON_TELEGRAM .. u8(' Notifications'),9,u8('Уведомления в Telegram')}
 			}
 
 			local function renderbutton(i)
@@ -2917,6 +2919,7 @@ function imgui.OnDrawFrame()
 		-- Раздел основных настроек -- 	
 
 		elseif menunum == 1 then
+			welcomeText = not imgui.TextColoredRGB("") 
 			PaddingSpace()
 			imgui.BeginChild('##ana',imgui.ImVec2(-1,-1),false)
 			imgui.Separator()
@@ -2941,11 +2944,12 @@ function imgui.OnDrawFrame()
 			imgui.Checkbox(u8('Открывать стандарт сундук'),roulette.standart); imgui.SameLine() imgui.TextQuestion(u8('Для оптимизации открывания сундуков стандартный сундук должен быть на любом слоте на 1 странице')) 
 			imgui.Checkbox(u8('Открывать донат сундук'),roulette.donate); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Донатный сундук должен быть на любом слоте на 1 странице'))
 			imgui.Checkbox(u8('Открывать платина сундук'),roulette.platina); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Платиновый сундук должен быть на любом слоте на 1 странице'))
-			imgui.Checkbox(u8('Открывать сундук Маска'),roulette.mask); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Сундук Маска должен быть на любом слоте на 1 странице'))
+			imgui.Checkbox(u8('Открывать тайник Илона Маска'),roulette.mask); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Сундук Маска должен быть на любом слоте на 1 странице'))
 			imgui.EndGroup()
 			imgui.SameLine(350)
 			imgui.BeginGroup()
 			imgui.Checkbox(u8('Открывать тайник Лос-Сантоса'),roulette.tainik); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Тайник Лос-Сантоса должен быть на любом слоте на 1 странице'))
+			imgui.TextDisabled((u8("Открывать тайник Vice-City")), roulette.tainikvc); imgui.SameLine() imgui.TextQuestion(u8('Скоро!'))
 			imgui.PushItemWidth(100)
 			imgui.InputInt(u8('Задержка (в минутах.)##wait'),roulette.wait)
 			imgui.SameLine()
@@ -3282,17 +3286,16 @@ function imgui.OnDrawFrame()
 			imgui.Text(u8(customtext))
 
 			-- Theme's System --
-			imgui.PushItemWidth(200)
-			imgui.Text(u8(prefixtext))
-			stepace5()
+			imgui.PushItemWidth(300)
+			-- stepace5()
 			if imgui.Combo(u8"Выберите тему", style_selected, style_list, style_selected) then
 				style(style_selected.v) 
 				mainIni.theme.style = style_selected.v 
 				inicfg.save(mainIni, 'AFKTools/AFKTools.ini') 
 			end
 			imgui.SameLine()
-			stepace5()
-			imgui.Text(u8'Все "новые" темы были взяты отсюда - blast.hk/threads/25442\nСпасибо парням с BlastHack за опубликованные темы.')
+			-- stepace5()
+			-- imgui.Text(u8'Все ImGUI прессеты, кроме  были взяты отсюда - blast.hk/threads/25442')
 
 			imgui.PopItemWidth()
 
@@ -3771,7 +3774,7 @@ function sampev.onShowTextDraw(id,data)
 			end
 			if checkopen.standart then
 				if id == opentimerid.standart then
-					AFKMessage('[standart] пытаюсь открыть сундук')
+					AFKMessage('[Сундук рулетки] пытаюсь открыть сундук')
 					wait(500)
 					sampSendClickTextdraw(id - 1)
 					use = true
@@ -3794,7 +3797,7 @@ function sampev.onShowTextDraw(id,data)
 			end
 			if checkopen.donate then
 				if id == opentimerid.donate then
-					AFKMessage('[donate] пытаюсь открыть сундук')
+					AFKMessage('[Донат-сундук] пытаюсь открыть сундук')
 					wait(500)
 					sampSendClickTextdraw(id - 1)
 					use = true
@@ -3817,7 +3820,7 @@ function sampev.onShowTextDraw(id,data)
 			end
 			if checkopen.platina then
 				if id == opentimerid.platina then
-					AFKMessage('[platina] пробую открыть сундук')
+					AFKMessage('[Платиновый сундук] пробую открыть сундук')
 					wait(500)
 					sampSendClickTextdraw(id - 1)
 					use = true
@@ -3840,7 +3843,7 @@ function sampev.onShowTextDraw(id,data)
 			end
 			if checkopen.mask then
 				if id == opentimerid.mask then
-					AFKMessage('[mask] пробую открыть сундук')
+					AFKMessage('[Тайник Илона Маска] пробую открыть сундук')
 					wait(500)
 					sampSendClickTextdraw(id - 1)
 					use = true
@@ -3863,7 +3866,7 @@ function sampev.onShowTextDraw(id,data)
 			end
 			if checkopen.tainik then
 				if id == opentimerid.tainik then
-					AFKMessage('[tainik] пробую открыть тайник')
+					AFKMessage('[Тайник Лос-Сантоса] пробую открыть тайник')
 					wait(500)
 					sampSendClickTextdraw(id - 1)
 					use = true
@@ -3878,7 +3881,7 @@ function sampev.onShowTextDraw(id,data)
 					checkopen.tainik = false
 				end
 			end
-		end
+		end    
 	 end)
 	end
 	--print('ID = %s, ModelID = %s, text = %s',id,data.modelId, data.text)
@@ -4376,6 +4379,7 @@ function saveini()
 	mainIni.roulette.donate = roulette.donate.v
 	mainIni.roulette.mask = roulette.mask.v
 	mainIni.roulette.tainik = roulette.tainik.v
+	mainIni.roulette.tainikvc = roulette.tainikvc.v
 	mainIni.roulette.wait = roulette.wait.v
 	--vk.notf
 	mainIni.vknotf.state = vknotf.state.v
