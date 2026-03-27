@@ -1,6 +1,6 @@
-script_name('AFK Tools') -- МЫ ПОФИКСИЛИ ТЕЛЕГУ, РКН СОСАТЬ!!!
+script_name('AFK Tools') -- ОГО ЧАТЫ И ОНЛАЙН!!!
 script_author("Bakhusse & Mamashin")
-script_version('3.4.1 HOTFIX')
+script_version('3.5.0')
 script_properties('work-in-pause')
 
 local dlstatus = require("moonloader").download_status
@@ -185,23 +185,27 @@ local mainIni = inicfg.load({
         step = 0
 	},
 	aoc = {
-		setmode = 0,
 		wait = 0,
 		auto_aoc = false,
 
+		mode = 0,
+		r_max = 120,
+		r_min = 60,
+
 		active = false,
-		worker = nil
+		worker = nil,
+		next_time = 0
 	},
 	config = {
 		banscreen = false,
 		autoupdate = true,
-		antiafk = false,
 		autoad = false,
 		autoo = false,
 		atext = '',
 		aphone = 0,
 		autoadbiz = false,
-		fastconnect = false
+		chat_login = '',
+		chat_pass = ''
 	},
 	delplayer = {
     	state = false,
@@ -685,6 +689,21 @@ changelog8 = [[
 		· Были добавлены Тайники Лича, Ведьмы, Медведя, Сердючки
 
 ]]
+changelog9 = [[
+
+	v3.5.0
+
+		· Удалено старое автооткрытие сундуков с рулетками
+		· Добавлен выбор режима работы автооткрытия сундуков и тайников (точное или рандомное КД)
+		· Добавлена возможность получить конфиг скрипта в ВК или ТГ (пока что текстом, в доработке)
+		· Была исправлена работа AFKTools reloader, теперь там также поддерживаются прокси
+		· [beta] Был сделан чат внутри скрипта между пользователями скрипта
+		· Был реализован счетчик онлайна пользователей скрипта
+		· Исправлена переменная lvl в настройках кастомного инфобара
+		· Удален Fastconnect
+		· Раздел Автозаполнение заменен на раздел Статистика, будет доработана в следующих обновлениях
+
+]]
 
 scriptinfo = [[
  AFK Tools - скрипт, для прокачки аккаунта на Arizona Role Play!
@@ -761,10 +780,9 @@ helpTG = [[
 
 customtext = [[
 
-Данный раздел находится на стадии разработки!
-
 В данном разделе вы можете наконец-то изменить ImGUI составляющую нашего скрипта!
 Задействован фристайл с BlastHack, а так же оригинальные темы на основе нашей основной темы!
+Так же здесь, вы можете кастомизировать элемент сообщений 
 
 ]]
 
@@ -803,6 +821,15 @@ howscreen = [[
   комбинацию Alt + Enter, после Win + стрелка вверх.
 ]]
 
+statstext = [[
+
+Данный раздел находится на стадии разработки!
+Но уже доступен, чтобы намекнуть вам о том, что Степан Мамашин тоже жив и делает для вас годноту!
+
+Следите за обновлениями скрипта на BlastHack и в нашей Группе ВКонтакте!
+
+]]
+
 local _message = {}
 
 local chat = "https://vk.me/join/OznKTxWIyyzo20jNxgdqqNkop85ZPJE1Xa0="
@@ -812,14 +839,107 @@ local style_list = {u8"Оригинальная", u8'Светлая', u8"Серая", u8"Тёмная", u8"Виш
 
 local banner = imgui.CreateTextureFromFile(getWorkingDirectory() .. "\\resource\\AFKTools\\script_banner.png")
 
+-- [Чат: Переменные]
+local chat_window = imgui.ImBool(false)
+local chat_msg_text = imgui.ImBuffer(256)
+local is_chat_authorized = false 
+local chat_messages = {}
+local last_chat_update = 0
+local chat_auth_process = nil
+local chat_error_msg = ""
+local vds_chat_url = "https://chat.bakh.us"
+local chat_user_data = {
+    nickname = "",
+    badge = "",
+    badge_color = "#ffd700",
+    nick_color = "#4da6ff",
+    is_banned = 0
+}
+
+if mainIni.config.chat_login == nil then mainIni.config.chat_login = "" end
+if mainIni.config.chat_pass == nil then mainIni.config.chat_pass = "" end
+local chat_login = imgui.ImBuffer(tostring(mainIni.config.chat_login or ""), 32)
+local chat_pass = imgui.ImBuffer(tostring(mainIni.config.chat_pass or ""), 32)
+
+local stats_timer = 60
+local lastPingTime = 0
+local online_count = "0"
+local lastUpdateStats = 0
+
+local function async_chat_request(method, endpoint, data)
+    local full_url = vds_chat_url .. endpoint
+    
+    local runner = effil.thread(function(m, url, d_str)
+        local status_req, requests = pcall(require, "requests")
+        if not status_req then return false, "no_lib" end
+
+        local options = {
+            timeout = 7,
+            verify = false,
+            headers = { ["Accept"] = "application/json" }
+        }
+
+        if m == "POST" and d_str then
+            options.data = d_str
+            options.headers["Content-Type"] = "application/json"
+        end
+
+        local status, res = pcall(requests.request, m, url, options)
+        if status and res then
+            return true, {status = res.status_code, body = res.text}
+        end
+        return false, "request_err"
+    end)
+    
+    local raw_data = nil
+    if data then
+        local st, dkjson = pcall(require, "dkjson")
+        if st then raw_data = dkjson.encode(data) end
+    end
+
+    return runner(method, full_url, raw_data)
+end
+
+local function hexToImVec4(hex)
+    hex = tostring(hex or ""):gsub("#", "")
+    if #hex ~= 6 then
+        return imgui.ImVec4(1.0, 1.0, 1.0, 1.0)
+    end
+
+    local r = tonumber(hex:sub(1, 2), 16) or 255
+    local g = tonumber(hex:sub(3, 4), 16) or 255
+    local b = tonumber(hex:sub(5, 6), 16) or 255
+
+    return imgui.ImVec4(r / 255, g / 255, b / 255, 1.0)
+end
+
+local function drawBadge(text, colorHex)
+    local badgeText = tostring(text or "")
+    if badgeText == "" then return end
+
+    local drawList = imgui.GetWindowDrawList()
+    local pos = imgui.GetCursorScreenPos()
+    local textSize = imgui.CalcTextSize(badgeText)
+
+    local padX, padY = 6, 2
+    local boxMin = imgui.ImVec2(pos.x, pos.y)
+    local boxMax = imgui.ImVec2(pos.x + textSize.x + padX * 2, pos.y + textSize.y + padY * 2)
+
+    local col = hexToImVec4(colorHex or "#ffd700")
+    local bg = imgui.GetColorU32(col)
+    local textCol = imgui.GetColorU32(imgui.ImVec4(0.05, 0.05, 0.05, 1.0))
+
+    drawList:AddRectFilled(boxMin, boxMax, bg, 4)
+    drawList:AddText(imgui.ImVec2(pos.x + padX, pos.y + padY), textCol, badgeText)
+
+    imgui.Dummy(imgui.ImVec2(textSize.x + padX * 2, textSize.y + padY * 2))
+end
 
 function AFKMessage(text,del)
 	del = del or 5
 	_message[#_message+1] = {active = false, time = 0, showtime = del, text = text}
 end
 --ale op, load
-local fastconnect = imgui.ImBool(mainIni.config.fastconnect)
-local antiafk = imgui.ImBool(mainIni.config.antiafk)
 local banscreen = imgui.ImBool(mainIni.config.banscreen)
 local autoupdateState = imgui.ImBool(mainIni.config.autoupdate)
 local autoad = imgui.ImBool(mainIni.config.autoad)
@@ -981,15 +1101,17 @@ local delcar = {
 	cd = imgui.ImInt(mainIni.delcar.cd)
 }
 local aoc = {
-	setmode = imgui.ImInt(mainIni.aoc.setmode),
 	wait = imgui.ImInt(mainIni.aoc.wait),
-	auto_aoc = imgui.ImBool(mainIni.aoc.auto_aoc)
+	auto_aoc = imgui.ImBool(mainIni.aoc.auto_aoc),
+
+	mode = imgui.ImInt(mainIni.aoc.mode),
+	r_max = imgui.ImInt(mainIni.aoc.r_max),
+	r_min = imgui.ImInt(mainIni.aoc.r_min)
 }
 -- one launch
 local afksets = imgui.ImBool(false)
 local showpass = false
 local showtoken = false
-local aopen = false
 local opentimerid = {
 	standart = -1,
 	donate = -1,
@@ -1046,30 +1168,6 @@ end)
 local createscreen = lua_thread.create_suspended(function()
 	wait(2000)
 	takeScreen()
-end)
-local checkrulopen = lua_thread.create_suspended(function()
-	while true do
-		wait(0)
-		if aopen then
-			sampSendClickTextdraw(65535)
-            wait(355)
-            fix = true
-            sampSendChat("/mn")
-			wait(2000)
-			sampCloseCurrentDialogWithButton(0)
-            wait(2000)
-            fix = false
-			AFKMessage('Начинаем делать проверку')
-			checkopen.standart = true
-			checkopen.donate = roulette.donate.v and true or false
-			checkopen.platina = roulette.platina.v and true or false
-			checkopen.mask = roulette.mask.v and true or false
-			checkopen.tainik = roulette.tainik.v and true or false
-			sampSendChat('/invent')
-			wait(roulette.wait.v*60000)
-			AFKMessage('Перезапуск')
-		end
-	end
 end)
 
 --autofill
@@ -1136,14 +1234,16 @@ local taxmode = {
 	u8('Примерное КД')
 }
 
-local aocmode = {
-	u8('Старое автооткрытие (TextDraw)'),
-	u8('Новое автооткрытие (CEF)')
-}
-
 -- автореконнект -- 
 
 local arecmode = {
+	u8('Точная задержка'),
+	u8('Примерная задержка')
+}
+
+-- автооткрытие -- 
+
+local aocmode = {
 	u8('Точная задержка'),
 	u8('Примерная задержка')
 }
@@ -1253,28 +1353,54 @@ end
 function newaoc()
     if aoc.active then
         stopNewAOC()
-        AFKMessage('Новое автооткрытие остановлено')
+        AFKMessage('Автооткрытие остановлено')
     else
         startNewAOC()
-        AFKMessage('Новое автооткрытие запущено')
+        AFKMessage('Автооткрытие запущено')
     end
+end
+
+local function calcAocDelay()
+    local ms = 0
+    if aoc.mode.v == 0 then
+        local minutes = aoc.wait.v
+        if minutes < 1 then minutes = 1 end
+        ms = minutes * 60 * 1000
+    else
+        local min = aoc.r_min.v
+        local max = aoc.r_max.v
+
+        if min > max then min, max = max, min end
+        if min < 1 then min = 1 end
+
+        ms = math.random(min, max) * 60 * 1000
+    end
+    return ms
 end
 
 function startNewAOC()
     if aoc.worker then return end
 
     aoc.active = true
-
     aoc.worker = lua_thread.create(function()
         while aoc.active do
+            aoc.next_time = 0 
+            
             runNewAOC()
+            
+            wait(13000) 
 
-            local waitMin = aoc.wait.v
-            if waitMin < 1 then waitMin = 1 end
+            local sleepMs = calcAocDelay()
+            aoc.next_time = os.clock() + (sleepMs / 1000)
 
-            wait(waitMin * 60 * 1000)
+            local totalSeconds = math.floor(sleepMs / 1000)
+            local mins = math.floor(totalSeconds / 60)
+            local secs = totalSeconds % 60
+            
+            AFKMessage(string.format("Следующее автооткрытие через %d мин. %02d сек.", mins, secs))
+            
+            wait(sleepMs)
         end
-
         aoc.worker = nil
     end)
 end
@@ -1940,6 +2066,8 @@ function longpollResolve(result)
 								sendscreen()
 							elseif pl.button == 'taxkey' then
 								paytax()
+							elseif pl.button == 'configkey' then
+								sendRemoteConfigVK()
 							elseif pl.button == 'keyW' then
 								setKeyFromVK('go',sendvknotf)
 							elseif pl.button == 'keyA' then
@@ -2303,7 +2431,7 @@ function sendtgnotf(msg)
         msg = applyInfobar(msg)
 
         local reply_markup = {
-            keyboard = {{"Info", "Stats", "Hungry"}, {"Enable auto-opening", "Last 10 lines of chat", "Pay taxes"}, {"Send Dialogs", "Support"}},
+            keyboard = {{"Info", "Stats", "Hungry"}, {"Enable auto-opening", "Last 10 lines of chat", "Pay taxes"}, {"Send Dialogs", "Support", "Get config"}},
             resize_keyboard = true
         }
         local rm_json = encodeJson(reply_markup)
@@ -2377,6 +2505,8 @@ function processing_telegram_messages(result)
 								lastchatmessageTG(10, sendtgnotf)
 							elseif text:match('^Pay taxes') then
 								paytax()
+							elseif text:match('^Get config') then
+								sendRemoteConfigTG()
 							elseif text:match('^Send Dialogs') then
 								sendDialogTG(sendtgnotf)
 							elseif text:match('^Enable auto-opening') then
@@ -2532,7 +2662,7 @@ function vkKeyboard() --создает конкретную клавиатуру для бота VK, как сделать д
 	row[1].color = 'positive'
 	row[1].action.type = 'text'
 	row[1].action.payload = '{"button": "openchest"}'
-	row[1].action.label = aopen and 'Выключить автооткрытие' or 'Включить автооткрытие'
+	row[1].action.label = 'Автооткрытие'
 	keyboard.buttons[3] = {} -- вторая строка кнопок
 	row = keyboard.buttons[3]
 	row[1] = {}
@@ -2575,6 +2705,12 @@ function vkKeyboard() --создает конкретную клавиатуру для бота VK, как сделать д
 	row[2].action.type = 'text'
     row[2].action.payload = '{"button": "taxkey"}'
 	row[2].action.label = 'Оплатить налоги'
+	row[3] = {}
+	row[3].action = {}
+	row[3].color = 'negative'
+	row[3].action.type = 'text'
+    row[3].action.payload = '{"button": "configkey"}'
+	row[3].action.label = 'Получить конфиг'
 	return encodeJson(keyboard)
 end
 function sendkeyboradkey()
@@ -3105,63 +3241,52 @@ function telegramRequest(requestMethod, telegramMethod, requestParameters, reque
     end
     thread:cancel(0)
 end
+
+function sendRemoteConfigVK()
+    local f = io.open(getWorkingDirectory() .. "\\config\\AFKTools\\AFKTools.ini", "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        
+        if #content > 3800 then content = content:sub(1, 3800) .. "\n[Текст обрезан...]" end
+        
+        local out = "Конфигурация AFKTools.ini:\n\n" .. content
+        
+        if vknotf.state.v then sendvknotf(out) end
+    end
+end
+
+function sendRemoteConfigTG()
+    local f = io.open(getWorkingDirectory() .. "\\config\\AFKTools\\AFKTools.ini", "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        
+        if #content > 3800 then content = content:sub(1, 3800) .. "\n[Текст обрезан...]" end
+        
+        local out = "Конфигурация AFKTools.ini:\n\n" .. content
+        
+        if tgnotf.state.v then sendtgnotf(out) end
+    end
+end
+
 function openchestrulletVK()
-	if aoc.setmode.v == 0 then
-		if isSampLoaded() and isSampAvailable() and sampIsLocalPlayerSpawned() then
-			if roulette.standart.v or roulette.donate.v or roulette.platina.v or roulette.mask.v or roulette.tainik.v then
-				aopen = not aopen
-				if aopen then 
-					checkrulopen:run()
-					afksets.v = false
-				else 
-					lua_thread.terminate(checkrulopen) 
-				end
-				sendvknotf('Автооткрытие '..(aopen and 'включено!' or 'выключено!'))
-			else
-				sendvknotf("Включите сундук с рулетками!")
-			end
+	if isSampLoaded() and isSampAvailable() and sampIsLocalPlayerSpawned() then
+		newaoc()
+		if aoc.active then
+			sendvknotf('CEF Автооткрытие выключено!')
 		else
-			sendvknotf('Ваш персонаж не заспавнен!')
-		end
-	end
-	if aoc.setmode.v == 1 then
-		if isSampLoaded() and isSampAvailable() and sampIsLocalPlayerSpawned() then
-			newaoc()
-			if aoc.active then
-				sendvknotf('CEF Автооткрытие выключено!')
-			else
-				sendvknotf('CEF Автооткрытие включено!')
-			end
+			sendvknotf('CEF Автооткрытие включено!')
 		end
 	end
 end
 function openchestrulletTG()
-	if aoc.setmode.v == 0 then
-		if isSampLoaded() and isSampAvailable() and sampIsLocalPlayerSpawned() then
-			if roulette.standart.v or roulette.donate.v or roulette.platina.v or roulette.mask.v or roulette.tainik.v then
-				aopen = not aopen
-				if aopen then 
-					checkrulopen:run()
-					afksets.v = false
-				else 
-					lua_thread.terminate(checkrulopen) 
-				end
-				sendtgnotf('Автооткрытие '..(aopen and 'включено!' or 'выключено!'))
-			else
-				sendtgnotf("Включите сундук с рулетками!")
-			end
+	if isSampLoaded() and isSampAvailable() and sampIsLocalPlayerSpawned() then
+		newaoc()
+		if aoc.active then
+			sendtgnotf('CEF Автооткрытие выключено!')
 		else
-			sendtgnotf('Ваш персонаж не заспавнен!')
-		end
-	end
-	if aoc.setmode == 1 then 
-		if isSampLoaded() and isSampAvailable() and sampIsLocalPlayerSpawned() then
-			newaoc()
-			if aoc.active then
-				sendtgnotf('CEF Автооткрытие выключено!')
-			else
-				sendtgnotf('CEF Автооткрытие включено!')
-			end
+			sendtgnotf('CEF Автооткрытие включено!')
 		end
 	end
 end
@@ -3183,24 +3308,6 @@ function sendDialogTG()
 	else
 	tgnotf.dienable.v = false
 	sendtgnotf('Отправка диалогов в TG отключена.')
-	end
-end
-function openchestrullet()
-	if sampIsLocalPlayerSpawned() then
-		if roulette.standart.v or roulette.donate.v or roulette.platina.v or roulette.mask.v or roulette.tainik.v then
-			aopen = not aopen
-			AFKMessage('Автооткрытие '..(aopen and 'включено!' or 'выключено!'))
-			if aopen then 
-				checkrulopen:run()
-				afksets.v = false
-			else 
-				lua_thread.terminate(checkrulopen) 
-			end
-		else
-			AFKMessage("Включите сундук с рулетками!")
-		end
-	else
-		AFKMessage("Ваш персонаж не заспавнен!")
 	end
 end
 bizpiaron = false
@@ -3343,12 +3450,7 @@ function main()
 		end
 	end)
 	sampRegisterChatCommand('autorul', function()
-		if aoc.setmode.v == 0 then
-			openchestrullet()
-		end
-		if aoc.setmode.v == 1 then
-			newaoc()
-		end
+		newaoc()
 	end)
 	--sampRegisterChatCommand('afkkick', closeConnect) -- ЭТО ТЕСТОВАЯ ХУЙНЯ, КТО ПРОЧИТАЛ У ТОГО ЧЛЕН МАЛЕНЬКИЙ
 	sampRegisterChatCommand('afksrec', function() 
@@ -3371,16 +3473,27 @@ function main()
 		a = a and (tonumber(a) and tonumber(a) or 1) or 1
 		reconstandart(a)
 	end)
-	if fastconnect.v then
-		sampFastConnect(fastconnect.v)
-	end
-	workpaus(antiafk.v)
 	lua_thread.create(vkget)
 	lua_thread.create(get_telegram_updates)
+	local lastPingTime = os.time() - stats_timer
     while true do 
 		wait(0)
-        imgui.Process = afksets.v or #_message>0
-		imgui.ShowCursor = afksets.v
+        imgui.Process = afksets.v or chat_window.v or #_message>0
+		imgui.ShowCursor = afksets.v or chat_window.v
+		if chat_window.v and is_chat_authorized then
+		    if os.clock() - last_chat_update > 1.0 then
+		        last_chat_update = os.clock()
+		        update_chat_messages()
+		    end
+		end
+		if os.time() - lastPingTime >= stats_timer then
+            sendOnlinePing()
+            lastPingTime = os.time()
+        end
+        if os.time() - lastUpdateStats >= 120 then
+		    updateOnlineCount()
+		    lastUpdateStats = os.time()
+		end
 		if idsshow then
             local alltextdraws = sampGetAllTextDraws()
             for _, v in pairs(alltextdraws) do
@@ -3452,163 +3565,17 @@ function onRenderNotification()
 	end
 	notfList = list:new()
 end
---imgui: элементы акков
-function autofillelementsaccs()
-	if imgui.Button(u8('Временные данные')) then menufill = 1 end
+--imgui: Раздел статистики
+function statistic()
 	imgui.SameLine()
-	if imgui.Button(u8('Добавить аккаунт')) then
-		imgui.OpenPopup('##addacc')
-	end
-	if imgui.BeginPopupModal('##addacc',true,imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
-		imgui.CenterText(u8('Добавить новый аккаунт'))
-		imgui.Separator()
-		imgui.CenterText(u8('Ник'))
-		imgui.Separator()
-		imgui.InputText('##nameadd',addnew.name)
-		imgui.Separator()
-		imgui.CenterText(u8('Пароль'))
-		imgui.Separator()
-		imgui.InputText('##addpas',addnew.pass)
-		imgui.Separator()
-		imgui.CenterText(u8('ID Диалога'))
-		imgui.SameLine()
-		imgui.TextQuestion(u8('ID Диалога в который надо ввести пароль\nНесколько ID для Arizona RP\n	2 - Диалог ввода пароля\n	991 - Диалог PIN-Кода банка'))
-		imgui.Separator()
-		imgui.InputInt('##dialogudadd',addnew.dialogid)
-		imgui.Separator()
-		imgui.CenterText(u8('IP сервера'))
-		imgui.SameLine()
-		imgui.TextQuestion(u8('IP Сервера, на котором будет введен пароль\nПример: 185.169.134.171:7777'))
-		imgui.Separator()
-		imgui.InputText('##ipport',addnew.serverip)
-		imgui.Separator()
-		if imgui.Button(u8("Добавить"), imgui.ImVec2(-1, 20)) then
-			if addnew:save() then
-				imgui.CloseCurrentPopup()
-			end
-		end
-		if imgui.Button(u8("Закрыть"), imgui.ImVec2(-1, 20)) then
-			imgui.CloseCurrentPopup()
-		end
-		imgui.EndPopup()
-	end
-	imgui.SameLine()
-	imgui.Checkbox(u8('Включить'),autologin.state); imgui.SameLine(); imgui.TextQuestion(u8('Включает автозаполнение в диалоги'))
-	imgui.SameLine()
-	imgui.CenterText(u8'Автозаполнение ' .. fa.ICON_PENCIL_SQUARE); imgui.SameLine()
+	imgui.CenterText(u8'Статистика и учёт ' .. fa.ICON_CREDIT_CARD_ALT); imgui.SameLine()
 	imgui.SameLine(838)
-	if imgui.Button(u8('Обновить')) then
-		local f = io.open(file_accs, "r")
-		if f then
-			savepass = decodeJson(f:read("a*"))
-			f:close()
-		end
-		AFKMessage('Подгруженны новые данные')
-	end
-	imgui.Columns(3, _, true)
 	imgui.Separator()
-	imgui.SetColumnWidth(-1, 150); imgui.Text(u8"   Никнейм"); imgui.NextColumn()
-	imgui.SetColumnWidth(-1, 150); imgui.Text(u8"Сервер"); imgui.NextColumn()
-	imgui.SetColumnWidth(-1, 450); imgui.Text(u8"Пароли"); imgui.NextColumn()
-	for k, v in pairs(savepass) do
-		imgui.Separator()
-		if imgui.Selectable(u8('   '..v[1]..'##'..k), false, imgui.SelectableFlags.SpanAllColumns) then imgui.OpenPopup('##acc'..k) end
-		if imgui.BeginPopupModal('##acc'..k,true,imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
-			btnWidth2 = (imgui.GetWindowWidth() - 22)/2
-			imgui.CreatePaddingY(8)
-			imgui.CenterText(u8('Аккаунт '..v[1]))
-			imgui.Separator()
-			for f,t in pairs(v[3]) do
-				imgui.Text(u8('Диалог[ID]: '..v[3][f].id..' Введённые данные: '..v[3][f].text))
-				if editpass.numedit == f then
-					imgui.PushItemWidth(-1)
-					imgui.InputText(u8'##pass'..f,editpass.input)
-					imgui.PopItemWidth()
-					if imgui.Button(u8("Подтвердить##"..f), imgui.ImVec2(-1, 20)) then
-						v[3][f].text = editpass.input.v
-						editpass.input.v = ''
-						editpass.numedit = -1
-						saveaccounts()
-					end
-				elseif editpass.numedit == -1 then
-					if imgui.Button(u8("Сменить пароль##2"..f), imgui.ImVec2(-1, 20)) then
-						editpass.input.v = v[3][f].text
-						editpass.numedit = f
-					end
-				end
-				if imgui.Button(u8("Скопировать##"..f), imgui.ImVec2(btnWidth2, 0)) then
-					setClipboardText(v[3][f].text)
-					imgui.CloseCurrentPopup()
-				end
-				imgui.SameLine()
-				if imgui.Button(u8("Удалить##"..f), imgui.ImVec2(btnWidth2, 0)) then
-					v[3][f] = nil
-					if #v[3] == 0 then
-						savepass[k] = nil
-					end
-					saveaccounts()
-				end
-				imgui.Separator()
-			end
-			if imgui.Button(u8("Подключиться"), imgui.ImVec2(-1, 20)) then
-				local ip2, port2 = string.match(v[2], "(.+)%:(%d+)")
-				reconname(v[1],ip2, tonumber(port2))
-			end
-			if imgui.Button(u8("Удалить все данные"), imgui.ImVec2(-1, 20)) then
-				savepass[k] = nil
-				imgui.CloseCurrentPopup()
-				saveaccounts()
-			end
-			if imgui.Button(u8("Закрыть##sdosodosdosd"), imgui.ImVec2(-1, 20)) then
-				imgui.CloseCurrentPopup()
-			end
-			imgui.CreatePaddingY(8)
-			imgui.EndPopup()
-		end
-		imgui.NextColumn()
-		imgui.Text(tostring(v[2]))
-		imgui.NextColumn()
-		imgui.Text(u8('Кол-во паролей: '..#v[3]..'. Нажмите ЛКМ для управления паролями'))
-		imgui.NextColumn()
+	if imgui.Button(u8('Добавить аккаунт')) then 
+		AFKMessage('Раздел в разработке!')
 	end
-	imgui.Columns(1)
-	imgui.Separator()
-end
---imgui: элементы сейва
-function autofillelementssave()
-	if imgui.Button(u8'< Аккаунты') then menufill = 0 end
-	imgui.SameLine()
-	imgui.CenterText(u8'Автозаполнение')
-	imgui.SameLine(838) 
-	if imgui.Button(u8('Очистка')) then temppass = {}; AFKMessage('Буфер временных паролей очищен!') end
-	imgui.Columns(5, _, true)
-	imgui.Separator()--710
-	imgui.SetColumnWidth(-1, 130); imgui.Text(u8"Диалог[ID]"); imgui.NextColumn()
-	imgui.SetColumnWidth(-1, 150); imgui.Text(u8"Никнейм"); imgui.NextColumn()
-	imgui.SetColumnWidth(-1, 140); imgui.Text(u8"Сервер"); imgui.NextColumn()
-	imgui.SetColumnWidth(-1, 170); imgui.Text(u8"Введенные данные"); imgui.NextColumn()
-	imgui.SetColumnWidth(-1, 140); imgui.Text(u8"Время"); imgui.NextColumn()
-	for k, v in pairs(temppass) do
-		if imgui.Selectable('   '..tostring(u8(string.gsub(v.title, "%{.*%}", "") .. "[" .. v.id .. "]")) .. "##" .. k, false, imgui.SelectableFlags.SpanAllColumns) then
-			saveacc(k)
-			saveaccounts()
-			AFKMessage('Пароль '..v.text..' для аккаунта '..v.nick..' на сервере '..v.ip..' сохранён!')
-		end
-		imgui.NextColumn()
-		imgui.Text(tostring(v.nick))
-		imgui.NextColumn()
-		imgui.Text(tostring(v.ip))
-		imgui.NextColumn()
-		imgui.Text(tostring(u8(v.text)))
-		imgui.NextColumn()
-		imgui.Text(tostring(v.time))
-		imgui.NextColumn()
-	end
-	imgui.Columns(1)
-	imgui.Separator()
 end
 
--- Шрифт v4(кринж пиздец) -- 
 
 function imgui.BeforeDrawFrame()
     if fa_font == nil then
@@ -3673,6 +3640,7 @@ function imgui.TextColoredRGB(text)
 end
 
 function imgui.OnDrawFrame()
+	draw_chat_window()
 	if afksets.v then
 		local acc = sampGetPlayerNickname(select(2,sampGetPlayerIdByCharHandle(playerPed)))
 		local sw, sh = getScreenResolution()
@@ -3716,7 +3684,7 @@ function imgui.OnDrawFrame()
 		if menunum == 0 then
 			local buttons = {
 				{fa.ICON_USER .. u8(' Основное'),1,u8('Настройка основных функций')},
-				{fa.ICON_PENCIL_SQUARE .. u8(' Автозаполнение'),2,u8('Автоввод текста в диалоги')},
+				{fa.ICON_CREDIT_CARD_ALT .. u8(' Статистика'),2,u8(' 	Статистика вашего AFK заработка')},
 				{fa.ICON_CUTLERY .. u8(' Авто-еда'),3,u8('Авто-еда & Авто-хилл')},
 				{fa.ICON_INFO .. u8(' Информация'),4,u8('Полезная информация о проекте')},
 				{fa.ICON_HISTORY .. u8(' История обновлений'),5,u8('Список изменений которые\n	 произошли в скрипте')},
@@ -3765,9 +3733,23 @@ function imgui.OnDrawFrame()
 			end
 			imgui.SetCursorPos(imgui.ImVec2(920/2 - 300/2,400))
 			imgui.BeginGroup()
+			if imgui.BeginPopupModal('##online',true,imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize) then
+				imgui.Text(u8(online))
+				imgui.SetCursorPosY(50) -- с пабликом (200) • без (490)
+				local wid = imgui.GetWindowWidth()
+				imgui.SetCursorPosX(wid / 2 - 30)
+				if imgui.Button(u8'Закрыть', imgui.ImVec2(60,20)) then
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
+			imgui.Button(fa.ICON_USER.." "..online_count, imgui.ImVec2(40, 30))
+			imgui.SameLine()
 			if imgui.Button(u8('Сохранить настройки'),imgui.ImVec2(150,30)) then saveini() end
 			imgui.SameLine()
 			if imgui.Button(u8('Перезагрузить скрипт'),imgui.ImVec2(150,30)) then thisScript():reload() end
+			imgui.SameLine()
+			if imgui.Button(fa.ICON_COMMENT, imgui.ImVec2(30, 30)) then chat_window.v = not chat_window.v end
 			imgui.EndGroup()
 		
 		-- Раздел основных настроек -- 	
@@ -3839,45 +3821,45 @@ function imgui.OnDrawFrame()
 			end
 			PaddingSpace()
 			imgui.Separator()
-			imgui.CenterText(u8('Автооткрытие рулеток'))
+			imgui.CenterText(u8('Автооткрытие рулеток')) imgui.SameLine() imgui.TextQuestion(u8('Данный режим работает на новом инвентаре. Скрипт сам выполняет поиск необходимых сундуков/тайников самостоятельно.\nСкрипт проверяет наличие: Сундука рулетки, Платинового сундука, Тайников Илона Маска, Лос-Сантоса, Vice-City, Фрирен, Донат-сундук и другие, а также активный акссесуар "Обрез"\nСкрипт сам находит их положение и открывает их по порядку расположения в инвентаре.'))
 			imgui.Separator()
 			PaddingSpace()
-			imgui.Text(u8'Режим работы'); imgui.SameLine() imgui.PushItemWidth(200) imgui.Combo('##aoc.mode', aoc.setmode, aocmode, -1) if aoc.setmode.v == 1 then imgui.SameLine() imgui.TextQuestion(u8('Данный режим работает на новом инвентаре. Скрипт сам выполняет поиск необходимых сундуков/тайников самостоятельно.\nСкрипт проверяет наличие: Сундука рулетки, Платинового сундука, Тайников Илона Маска, Лос-Сантоса, Vice-City, Фрирен, Донат-сундук, а также активный акссесуар "Обрез"\nСкрипт сам находит их положение и открывает их по порядку расположения в инвентаре.')) end
-			if aoc.setmode.v == 0 then
 				imgui.BeginGroup()
-				imgui.Checkbox(u8('Открывать стандарт сундук'),roulette.standart); imgui.SameLine() imgui.TextQuestion(u8('Для оптимизации открывания сундуков стандартный сундук должен быть на любом слоте на 1 странице')) 
-				imgui.Checkbox(u8('Открывать донат сундук'),roulette.donate); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Донатный сундук должен быть на любом слоте на 1 странице'))
-				imgui.Checkbox(u8('Открывать платина сундук'),roulette.platina); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Платиновый сундук должен быть на любом слоте на 1 странице'))
-				imgui.Checkbox(u8('Открывать тайник Илона Маска'),roulette.mask); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Сундук Маска должен быть на любом слоте на 1 странице'))
-				imgui.EndGroup()
-				imgui.SameLine(350)
-				imgui.BeginGroup()
-				imgui.Checkbox(u8('Открывать тайник Лос-Сантоса'),roulette.tainik); imgui.SameLine() imgui.TextQuestion(u8('[Обязательно!] Тайник Лос-Сантоса должен быть на любом слоте на 1 странице'))
-				imgui.TextDisabled((u8("Открывать тайник Vice-City")), roulette.tainikvc); imgui.SameLine() imgui.TextQuestion(u8('Скоро!'))
-				imgui.PushItemWidth(100)
-				imgui.InputInt(u8('Задержка (в минутах.)##wait'),roulette.wait)
-				imgui.SameLine()
-				imgui.TextQuestion(u8('Задержка перед чеком состояния рулеток(можно открыть или нет)'))
-				imgui.PopItemWidth()
-				if imgui.Button(u8('Включить/выключить автооткрытие сундуков')) then 
-				    openchestrullet()
-				end
-			end
-			if aoc.setmode.v == 1 then 
-				imgui.BeginGroup()
-				imgui.PushItemWidth(100)
-				imgui.Text(u8'Задержка (в минутах)'); imgui.SameLine() imgui.InputInt(u8('##aoc.wait'), aoc.wait)
+				imgui.PushItemWidth(160)
+				imgui.Text(u8'Режим задержки') imgui.SameLine()
+			    imgui.Combo('##aoc.mode', aoc.mode, aocmode, -1)
+			    imgui.PushItemWidth(100)
+				if aoc.mode.v == 0 then
+					imgui.Text(u8'Задержка (в минутах)'); imgui.SameLine() imgui.InputInt(u8('##aoc.wait'), aoc.wait)
+			    else
+			        imgui.InputInt(u8'От (мин)', aoc.r_min, 1)
+			        imgui.SameLine()
+			        imgui.InputInt(u8'До (мин)', aoc.r_max, 1)
+			    end
 				imgui.Checkbox(u8('Автоматическое включение'), aoc.auto_aoc) imgui.SameLine() imgui.TextQuestion(u8('Скрипт автоматически будет включать автооткрытие рулеток при спавне игрока, а также при перезапуске скрипта.'))
 				if imgui.Button(u8('Включить/выключить')) then
 					newaoc()
 				end
 				imgui.SameLine()
 				if aoc.active then 
-					imgui.Text(u8('Статус: включено'))
+				    imgui.Text(u8('Статус: включено •'))
+				    imgui.SameLine()
+				    
+				    if aoc.next_time > 0 then
+				        local timeLeft = aoc.next_time - os.clock()
+				        if timeLeft > 0 then
+				            local mins = math.floor(timeLeft / 60)
+				            local secs = math.floor(timeLeft % 60)
+				            imgui.Text(u8(string.format('Следующее открытие через: %02d:%02d', mins, secs)))
+				        else
+				            imgui.Text(u8('Следующее открытие: сейчас...'))
+				        end
+				    else
+				        imgui.Text(u8('Следующее открытие: выполняется...'))
+				    end
 				else 
-					imgui.Text(u8('Статус: выключено'))
+				    imgui.Text(u8('Статус: выключено'))
 				end
-			end
 			imgui.EndGroup()
 			PaddingSpace()
 			imgui.Separator()
@@ -3930,20 +3912,9 @@ function imgui.OnDrawFrame()
 			imgui.Separator()
 			PaddingSpace()
 			imgui.BeginGroup()
-			if imgui.Checkbox(u8('Fastconnect'),fastconnect) then
-				sampFastConnect(fastconnect.v)
-			end
-			imgui.SameLine()
-			imgui.TextQuestion(u8('Быстрый вход на сервер'))
-			--[[if imgui.Checkbox(u8('AntiAFK'),antiafk) then workpaus(antiafk.v) end
-			imgui.SameLine()
-			imgui.TextQuestion(u8('Вы не будете стоять в AFK если свернете игру\nВнимание! Если AntiAFK включен и вы сохранили настройки то при следуещем заходе он автоматически включится! Учтите это!'))]]
 			imgui.Checkbox(u8('AutoScreenBan'),banscreen)
 			imgui.SameLine()
 			imgui.TextQuestion(u8('Если вас забанит админ то скрин сделается автоматически'))
-			imgui.EndGroup()
-			imgui.SameLine(350)
-			imgui.BeginGroup()
 			imgui.Checkbox(u8('Автообновление'),autoupdateState)
 			imgui.SameLine()
 			imgui.TextQuestion(u8('Включает автообновление. По умолчанию включено'))
@@ -4066,13 +4037,13 @@ function imgui.OnDrawFrame()
 			imgui.EndGroup()
 			imgui.EndChild()
 
+		-- Статистика и учёт -- 
+
 		elseif menunum == 2 then
 			imgui.BeginChild('##ana',imgui.ImVec2(-1,-1),false)
-			if menufill == 0 then
-				autofillelementsaccs()
-			elseif menufill == 1 then
-				autofillelementssave()
-			end
+			imgui.CenterText(u8('Статистика и учёт ') .. fa.ICON_CREDIT_CARD_ALT)
+			imgui.Separator()
+			imgui.Text(u8(statstext))
 			imgui.EndChild()
 
 		-- Авто-еда -- 
@@ -4191,7 +4162,7 @@ function imgui.OnDrawFrame()
 			imgui.Spacing()
 			imgui.Text(u8("Связь с разработчиками ")) --.. fa.ICON_ENVELOPE)
 			if imgui.Button(fa.ICON_VK .. u8(' - Bakhusse')) then
-				os.execute("start https://vk.com/sk33z")
+				os.execute("start https://vk.com/bakhusse")
 			end
 			imgui.SameLine()
 			if imgui.Button(fa.ICON_VK .. u8(' - Mamashin')) then
@@ -4238,8 +4209,11 @@ function imgui.OnDrawFrame()
 			elseif imgui.CollapsingHeader(u8'v3.3 (Новые функции и много исправлений)') then
 				imgui.TextWrapped(u8(changelog7))
 				imgui.Separator()
-			elseif imgui.CollapsingHeader(fa.ICON_STAR ..u8'  v3.4 (Еще больше новых функций и исправлений)') then
+			elseif imgui.CollapsingHeader(u8'v3.4 (Еще больше новых функций и исправлений)') then
 				imgui.TextWrapped(u8(changelog8))
+				imgui.Separator()
+			elseif imgui.CollapsingHeader(fa.ICON_STAR ..u8'  v3.5 (Доработка действущих функций, удаление старых, создание новых)') then
+				imgui.TextWrapped(u8(changelog9))
 				imgui.Separator()
 			end
 			imgui.PopItemWidth()
@@ -4741,29 +4715,6 @@ function PaddingSpace()
 	end
 end
 
--- AntiAFK --
-function workpaus(bool)	
-	if bool then
-		memory.setuint8(7634870, 1, false)
-		memory.setuint8(7635034, 1, false)
-		memory.fill(7623723, 144, 8, false)
-		memory.fill(5499528, 144, 6, false)
-	else
-		memory.setuint8(7634870, 0, false)
-		memory.setuint8(7635034, 0, false)
-		memory.hex2bin('0F 84 7B 01 00 00', 7623723, 8)
-		memory.hex2bin('50 51 FF 15 00 83 85 00', 5499528, 6)
-	end
-	-- AFKMessage('AntiAFK '..(bool and 'работает' or 'не работает'))
-end
-function sampFastConnect(bool)
-	if bool then 
-		writeMemory(sampGetBase() + 0x2D3C45, 2, 0, true)
-	else
-		writeMemory(sampGetBase() + 0x2D3C45, 2, 8228, true)
-	end
-end
-
 -- Автозаполнение -- 
 function findDialog(id, dialog)
 	for k, v in pairs(savepass[id][3]) do
@@ -4941,124 +4892,6 @@ function sampev.onShowTextDraw(id,data)
 	    end
 	end
 
-	if aopen then -- state
-	 lua_thread.create(function()
-		if roulette.standart.v then --standard
-			if data.modelId == 19918 then --standart model
-				opentimerid.standart = id + 1
-			end
-			if checkopen.standart then
-				if id == opentimerid.standart then
-					AFKMessage('[Сундук рулетки] пытаюсь открыть сундук')
-					wait(500)
-					sampSendClickTextdraw(id - 1)
-					use = true
-					wait(500)
-					if use then
-      					sampSendClickTextdraw(2302)
-        				use = false
-      				end
-					if not checkopen.donate and not checkopen.platina and not checkopen.mask and not checkopen.tainik then
-						sendcloseinventory()
-					end
-					checkopen.standart = false
-				end
-			end
-		end
-		wait(1000)
-		if roulette.donate.v then
-			if data.modelId == 19613 then --standart model
-				opentimerid.donate = id + 1
-			end
-			if checkopen.donate then
-				if id == opentimerid.donate then
-					AFKMessage('[Донат-сундук] пытаюсь открыть сундук')
-					wait(500)
-					sampSendClickTextdraw(id - 1)
-					use = true
-					wait(500)
-					if use then
-      					sampSendClickTextdraw(2302)
-        				use = false
-      				end
-					if not checkopen.standart and not checkopen.platina and not checkopen.mask and not checkopen.tainik then
-						sendcloseinventory()
-					end
-					checkopen.donate = false
-				end
-			end
-		end
-		wait(1000)
-		if roulette.platina.v then
-			if data.modelId == 1353 then --standart model
-				opentimerid.platina = id + 1
-			end
-			if checkopen.platina then
-				if id == opentimerid.platina then
-					AFKMessage('[Платиновый сундук] пробую открыть сундук')
-					wait(500)
-					sampSendClickTextdraw(id - 1)
-					use = true
-					wait(500)
-					if use then
-      					sampSendClickTextdraw(2302)
-        				use = false
-      				end
-					if not checkopen.standart and not checkopen.donate and not checkopen.mask and not checkopen.tainik then
-						sendcloseinventory()
-					end
-					checkopen.platina = false
-				end
-			end
-		end
-		wait(1000)
-		if roulette.mask.v then
-			if data.modelId == 1733 then --standart model
-				opentimerid.mask = id + 1
-			end
-			if checkopen.mask then
-				if id == opentimerid.mask then
-					AFKMessage('[Тайник Илона Маска] пробую открыть сундук')
-					wait(500)
-					sampSendClickTextdraw(id - 1)
-					use = true
-					wait(500)
-					if use then
-      					sampSendClickTextdraw(2302)
-        				use = false
-      				end
-					if not checkopen.standart and not checkopen.donate and not checkopen.platina and not checkopen.tainik then
-						sendcloseinventory()
-					end
-					checkopen.mask = false
-				end
-			end
-		end
-		wait(1000)
-		if roulette.tainik.v then
-			if data.modelId == 2887 then --standart model
-				opentimerid.tainik = id + 1
-			end
-			if checkopen.tainik then
-				if id == opentimerid.tainik then
-					AFKMessage('[Тайник Лос-Сантоса] пробую открыть тайник')
-					wait(500)
-					sampSendClickTextdraw(id - 1)
-					use = true
-					wait(500)
-					if use then
-      					sampSendClickTextdraw(2302)
-        				use = false
-      				end
-					if not checkopen.standart and not checkopen.donate and not checkopen.platina and not checkopen.mask then
-						sendcloseinventory()
-					end
-					checkopen.tainik = false
-				end
-			end
-		end    
-	 end)
-	end
 	--print('ID = %s, ModelID = %s, text = %s',id,data.modelId, data.text)
 end
 function sampev.onSetPlayerHealth(healthfloat)
@@ -5540,6 +5373,358 @@ function reconname(playername,ips,ports)
 		end 
 	end)
 end
+
+function getPlayerUniqueId()
+    if isSampAvailable() then
+        local name = sampGetPlayerNickname(select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)))
+        local ip, port = sampGetCurrentServerAddress()
+        return string.format("%s@%s:%d", name, ip, port)
+    end
+    return "unknown"
+end
+
+function sendOnlinePing()
+    lua_thread.create(function()
+        if not isSampAvailable() then return end
+
+        local _, my_id_int = sampGetPlayerIdByCharHandle(PLAYER_PED)
+        local name = sampGetPlayerNickname(my_id_int)
+        
+        local safe_id = tostring(name) .. "_user" 
+
+        local encoded_id = u8:encode(safe_id):gsub("([^%w])", function(c)
+            return string.format("%%%02X", string.byte(c))
+        end)
+
+        local full_url = "https://afk.online.bakh.us/ping/?id=" .. encoded_id
+
+        local ok, response = pcall(requests.get, full_url, {
+            timeout = 7,
+            verify = false
+        })
+    end)
+end
+
+function updateOnlineCount()
+    lua_thread.create(function()
+        local stats_url_get = "https://afk.online.bakh.us/online"
+        local ok, response = pcall(requests.get, stats_url_get, {timeout = 5})
+        
+        if ok and response.status_code == 200 then
+            local count = response.text:match('"count":%s*(%d+)')
+            if count then
+                online_count = tostring(count)
+            end
+        end
+    end)
+end
+
+function update_chat_messages()
+    local get_task = async_chat_request("GET", "/messages")
+
+    lua_thread.create(function()
+        local timeout = os.clock() + 2.5
+        while os.clock() < timeout do
+            local task_status = tostring(get_task:status())
+
+            if task_status == "completed" then
+                local ok, response = get_task:get()
+
+                if ok and response and response.status == 200 and response.body then
+                    local dkjson = require("dkjson")
+                    local decoded, pos, err = dkjson.decode(response.body)
+
+                    if not err and type(decoded) == "table" then
+                        if decoded.messages and type(decoded.messages) == "table" then
+                            chat_messages = decoded.messages
+                        else
+                            chat_messages = decoded
+                        end
+                    end
+                end
+                return
+            elseif task_status == "failed" then
+                return
+            end
+            wait(0)
+        end
+    end)
+end
+
+function draw_chat_window()
+	local sw, sh = getScreenResolution()
+	imgui.SetNextWindowPos(imgui.ImVec2(sw/2,sh/2),imgui.Cond.FirstUseEver,imgui.ImVec2(0.5,0.5))
+    if not chat_window.v then return end
+
+    imgui.SetNextWindowSize(imgui.ImVec2(400, 500), imgui.Cond.FirstUseEver)
+    if imgui.Begin(u8"AFK Tools | Межсерверный чат! [beta]", chat_window, imgui.WindowFlags.NoCollapse) then
+        
+        if not is_chat_authorized then
+            imgui.Text(u8"Вход в сеть чата:")
+            imgui.Separator()
+            imgui.Spacing()
+            
+            imgui.Text(u8"Никнейм:")
+            imgui.PushItemWidth(-1)
+            imgui.InputText("##chat_login", chat_login)
+            
+            imgui.Spacing()
+            imgui.Text(u8"Пароль:")
+            imgui.InputText("##chat_pass", chat_pass, imgui.InputTextFlags.Password)
+            imgui.PopItemWidth()
+            
+            imgui.Spacing()
+
+			if imgui.Button(u8"ВОЙТИ", imgui.ImVec2(185, 35)) then
+			    if #chat_login.v > 2 and #chat_pass.v > 3 then
+			        local auth_task = async_chat_request("POST", "/login", {nickname = chat_login.v, password = chat_pass.v})
+			        chat_error_msg = u8"Авторизация..."
+			        
+			        lua_thread.create(function()
+			            local start = os.clock()
+			            while os.clock() - start < 10 do
+			                local status = tostring(auth_task:status())
+			                if status == "completed" then
+			                    local ok, response = auth_task:get()
+			                    if ok and response and response.status == 200 then
+			                    	local dkjson = require("dkjson")
+									local decoded = dkjson.decode(response.body)
+
+									if decoded and decoded.user then
+									    chat_user_data.nickname = decoded.user.nickname or chat_login.v
+									    chat_user_data.badge = decoded.user.badge or ""
+									    chat_user_data.badge_color = decoded.user.badge_color or "#ffd700"
+									    chat_user_data.nick_color = decoded.user.nick_color or "#4da6ff"
+									    chat_user_data.is_banned = decoded.user.is_banned or 0
+									end
+			                        is_chat_authorized = true
+			                        chat_error_msg = ""
+			                        last_chat_update = 0
+			                        AFKMessage("[chat] Вход выполнен!")
+			                        
+			                        mainIni.config.chat_login = chat_login.v
+			                        mainIni.config.chat_pass = chat_pass.v
+			                        inicfg.save(mainIni, 'AFKTools/AFKTools.ini')
+			                    else
+			                        chat_error_msg = u8"Ошибка входа (неверный пароль)"
+			                    end
+			                    return
+			                elseif status == "failed" then
+			                    chat_error_msg = u8"Ошибка потока!"
+			                    return
+			                end
+			                wait(0)
+			            end
+			            chat_error_msg = u8"Тайм-аут"
+			        end)
+			    end
+			end
+
+			imgui.SameLine()
+
+			if imgui.Button(u8"РЕГИСТРАЦИЯ", imgui.ImVec2(185, 35)) then
+			    if #chat_login.v > 2 and #chat_pass.v > 3 then
+			        local reg_task = async_chat_request("POST", "/register", {
+			            nickname = tostring(chat_login.v),
+			            password = tostring(chat_pass.v)
+			        })
+			        chat_error_msg = u8"Регистрация..."
+
+			        lua_thread.create(function()
+			            local timeout = os.clock() + 10
+			            while os.clock() < timeout do
+			                local task_status = tostring(reg_task:status())
+
+			                if task_status == "completed" then
+			                    local ok, response = reg_task:get()
+
+			                    if ok and response and response.body then
+			                        local dkjson = require("dkjson")
+			                        local decoded, pos, err = dkjson.decode(response.body)
+
+			                        if response.status == 200 then
+			                            is_chat_authorized = true
+			                            chat_error_msg = u8"Аккаунт успешно создан!"
+			                            last_chat_update = 0
+
+			                            mainIni.config.chat_login = tostring(chat_login.v)
+			                            mainIni.config.chat_pass = tostring(chat_pass.v)
+			                            inicfg.save(mainIni, 'AFKTools/AFKTools.ini')
+
+			                            AFKMessage("[chat] Аккаунт успешно создан!")
+			                        else
+			                            if not err and decoded and decoded.error then
+										    local err_text = tostring(decoded.error or "Ошибка регистрации")
+
+										    chat_error_msg = err_text
+										else
+										    chat_error_msg = "Ошибка регистрации"
+										    AFKMessage("[chat] Ошибка регистрации")
+										end
+			                        end
+			                    else
+			                        chat_error_msg = u8"Ошибка связи с сервером"
+			                        AFKMessage("[chat] Ошибка связи с сервером")
+			                    end
+			                    return
+			                elseif task_status == "failed" then
+			                    chat_error_msg = u8"Ошибка потока"
+			                    AFKMessage("[chat] Ошибка потока")
+			                    return
+			                end
+
+			                wait(0)
+			            end
+
+			            chat_error_msg = u8"Сервер не ответил"
+			            AFKMessage("[chat] Сервер не ответил")
+			        end)
+			    else
+			        chat_error_msg = u8"Логин или пароль слишком короткие"
+			        AFKMessage("[chat] Логин или пароль слишком короткие")
+			    end
+			end
+
+            if chat_error_msg ~= "" then
+                imgui.TextColored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), chat_error_msg)
+            end
+
+			if chat_auth_process then
+			    local thread_status, s, r = chat_auth_process:get(0)
+			    if thread_status == "completed" then
+			        if s and r then
+			            print("[Chat Debug] Server Status: " .. tostring(r.status))
+			            
+			            if r.status == 200 then
+			                is_chat_authorized = true
+			                chat_error_msg = ""
+			                last_chat_update = 0
+			                AFKMessage("[chat] Авторизация успешна!")
+			            else
+			                local err_text = (r.body and r.body.error) and r.body.error or "Unknown Error"
+			                chat_error_msg = u8(err_text)
+			                print("[Chat Debug] Login failed: " .. err_text)
+			            end
+			        else
+			            chat_error_msg = u8"Ошибка связи с сервером"
+			            print("[Chat Debug] Thread returned nil or error")
+			        end
+			        chat_auth_process = nil
+			    elseif thread_status == "failed" then
+			        chat_error_msg = u8"Критическая ошибка потока"
+			        chat_auth_process = nil
+			        print("[Chat Debug] Effil thread failed!")
+			    end
+			end
+
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.TextColored(imgui.ImVec4(1.0, 0.8, 0.0, 1.0), u8"ВАЖНО:")
+            imgui.TextWrapped(u8"Соблюдайте анонимность. Не упоминайте сервер, админов или личные данные. Просим учесть то, что функция чата находится в beta-тестировании, о проблемах сообщайте в Беседу ВК или в Теме на BlastHack.")
+            
+        else
+            -- ================= [ БЛОК ЧАТА ] =================
+            imgui.Text(u8"Вы вошли как: ")
+			imgui.SameLine()
+
+			-- бейдж
+			if chat_user_data.badge ~= "" then
+			    drawBadge(chat_user_data.badge, chat_user_data.badge_color)
+			    imgui.SameLine()
+			end
+
+			-- ник
+			imgui.TextColored(
+			    hexToImVec4(chat_user_data.nick_color),
+			    chat_user_data.nickname
+			)
+			imgui.SameLine()
+
+			imgui.Text(u8"|")
+			imgui.SameLine()
+
+			if chat_user_data and chat_user_data.is_banned == 1 then
+			    imgui.TextColored(
+			        imgui.ImVec4(1.0, 0.3, 0.3, 1.0),
+			        u8"Забанен"
+			    )
+			else
+			    imgui.TextColored(
+			        imgui.ImVec4(0.3, 1.0, 0.3, 1.0),
+			        u8"Активен"
+			    )
+			end
+            imgui.BeginChild("ChatMessages", imgui.ImVec2(0, -90), true)
+            
+			if #chat_messages == 0 then
+			    imgui.Text(u8"Сообщений в базе нет или загрузка...")
+			else
+			    for i = 1, #chat_messages do
+				    local m = chat_messages[i]
+				    if m and type(m) == "table" then
+				        imgui.PushID(i)
+
+				        imgui.TextColored(
+				            imgui.ImVec4(0.5, 0.5, 0.5, 1.0),
+				            "[" .. tostring(m.time or "??:??") .. "]"
+				        )
+				        imgui.SameLine()
+
+				        if m.badge and tostring(m.badge) ~= "" then
+				            drawBadge(tostring(m.badge), tostring(m.badge_color or "#ffd700"))
+				            imgui.SameLine()
+				        end
+
+				        imgui.TextColored(
+				            hexToImVec4(m.nick_color or "#4da6ff"),
+				            tostring(m.author or "Anon") .. ":"
+				        )
+				        imgui.SameLine()
+
+				        imgui.TextWrapped(tostring(m.text or ""))
+
+				        imgui.PopID()
+				    end
+				end
+			end
+            
+            if imgui.GetScrollY() >= imgui.GetScrollMaxY() then
+                imgui.SetScrollHere(1.0)
+            end
+            imgui.EndChild()
+
+            imgui.Separator()
+            imgui.Spacing()
+
+            -- Поле ввода
+            imgui.Text(u8"Сообщение:")
+            imgui.PushItemWidth(imgui.GetWindowWidth() - 50)
+            if imgui.InputText("##new_msg", chat_msg_text, imgui.InputTextFlags.EnterReturnsTrue) then
+                if #chat_msg_text.v > 0 then
+                    async_chat_request("POST", "/send", {nickname = chat_login.v, text = tostring(chat_msg_text.v)})
+                    chat_msg_text.v = ""
+                    update_chat_messages()
+					last_chat_update = os.clock()
+                end
+            end
+            imgui.PopItemWidth()
+            
+            imgui.SameLine()
+            
+            if imgui.Button(fa.ICON_PAPER_PLANE, imgui.ImVec2(24, 24)) then
+                if #chat_msg_text.v > 0 then
+                    async_chat_request("POST", "/send", {nickname = chat_login.v, text = tostring(chat_msg_text.v)})
+                    chat_msg_text.v = ""
+					update_chat_messages()
+					last_chat_update = os.clock()
+                end
+            end
+        end
+        
+        imgui.End()
+    end
+end
+
 -- создать autorecon
 function goaurc()
 	if vknotf.iscloseconnect.v then
@@ -5679,15 +5864,15 @@ function saveini()
 	mainIni.piar.auto_piar = piar.auto_piar.v
 	mainIni.piar.auto_piar_kd = piar.auto_piar_kd.v
 	--main config
-	mainIni.config.antiafk = antiafk.v
 	mainIni.config.banscreen = banscreen.v
 	mainIni.config.autoupdate = autoupdateState.v
-	mainIni.config.fastconnect = fastconnect.v
 	mainIni.config.autoad = autoad.v
 	mainIni.config.autoadbiz = autoadbiz.v
 	mainIni.config.autoo = autoo.v
 	mainIni.config.atext = atext.v
 	mainIni.config.aphone = aphone.v
+	mainIni.config.chat_login = chat_login.v
+	mainIni.config.chat_pass = chat_pass.v
 	--eat
 	mainIni.eat.checkmethod = eat.checkmethod.v
 	mainIni.eat.cycwait = eat.cycwait.v
@@ -5715,9 +5900,13 @@ function saveini()
 	mainIni.delcar.state = delcar.state.v
 	mainIni.delcar.cd = delcar.cd.v
 	--aoc
-	mainIni.aoc.setmode = aoc.setmode.v
 	mainIni.aoc.wait = aoc.wait.v
 	mainIni.aoc.auto_aoc = aoc.auto_aoc.v
+
+	mainIni.aoc.r_max = aoc.r_max.v
+	mainIni.aoc.r_min = aoc.r_min.v
+	mainIni.aoc.mode = aoc.mode.v
+
 	--buttons
 	mainIni.buttons.binfo = binfo.v
 	local saved = inicfg.save(mainIni,'AFKTools/AFKTools.ini')
